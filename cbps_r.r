@@ -94,35 +94,17 @@ cbps_att = function(
 }
 
 # %%
-n = 15000
-p = 40
-X = matrix(rnorm(n * p), n, p)
-W = rbinom(n, 1, 1 / (1 + exp(2.5 - X[, 1])))
-
-table(W)
-
-system.time(res <- cbps_att(X, W, control = list(trace = 10, maxit = 5000)))
-
-res$weights.0 %>% length
-# %%
-head(res$balance.condition)
-plot(res$balance.std)
-abline(h = 0)
-
-# %%
+library(LalRUtils)
 data(lalonde.psid)
 df = setDT(lalonde.psid)
 yn = 're78'; wn = 'treat'; xn = setdiff(colnames(df), c(yn, wn))
 y = df[[yn]]; w = df[[wn]]; X = df[, ..xn] %>% as.matrix
 
-X %>% dim
-
+# %%
 ebwt = ebalance(w, X)$w
 mean(y[w == 1]) - weighted.mean(y[w == 0], ebwt)
-# %%
+# %% should be the same modulo optimization issues
 cbpswt = cbps_att(X, w)
 cbpw = cbpswt$weights.0[w == 0]
 mean(y[w == 1]) - weighted.mean(y[w == 0], cbpw)
-# %%
-cbpswt$θ.hat %>% length
 # %%

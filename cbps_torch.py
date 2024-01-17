@@ -48,10 +48,12 @@ df.head()
 w, y = df.treat.values, df.re78.values
 # naive estimate is garbage - true effect is ~ 1800
 y[w == 1].mean() - y[w == 0].mean()
+# -15204.775555988717
 # %% stabilize by scaling covariates
 X = df.drop(columns=["treat", "re78"]).values
 X = MinMaxScaler().fit_transform(X)
 # %% cbps estimate - comes pretty close to true effect
 cbps_wt = cbps_att_torch(X, w, niter=5_000, lr=0.001, noi=False)
 y[w == 1].mean() - np.average(y[w == 0], weights=cbps_wt)
+# 1946.715423006407
 # %%
