@@ -7,6 +7,10 @@ from torch.autograd import Variable
 
 from sklearn.preprocessing import MinMaxScaler
 
+# setting device on GPU if available, else CPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Using device:", device)
+
 
 # %%
 def cbps_torch(
@@ -39,13 +43,15 @@ def cbps_torch(
     if intercept:
         X = np.c_[(np.ones((n, 1)), X)]
     # preprocessing for numpy to pytorch
-    X, w = torch.from_numpy(X).float(), torch.from_numpy(w).float()
+    # move to GPU if available so ADAM auto-defaults to foreach
+    X_t = torch.from_numpy(X).float().to(device)
+    w_t = torch.from_numpy(w).float().to(device)
     # Parameters theta to be optimized
     theta = Variable(torch.randn(p + 1), requires_grad=True)
 
     # loss function depends on estimand
     if estimand == "ATT":
-
+        # ATT balancing loss
         def loss_function(theta, X, W):
             Xb = torch.matmul(X, theta)
             w0piece = torch.mul((1 - W), torch.exp(Xb))
@@ -54,20 +60,20 @@ def cbps_torch(
             return loss
 
     elif estimand == "ATE":
-        # Define the loss function ℓ(θ) as per equation (7.10)
+        # ATE balancing loss : ℓ(θ) as per equation (7.10)
         def loss_function(theta, X, W):
             Xb = torch.matmul(X, theta)
             loss = torch.mean(W * torch.exp(-Xb) + (1 - W) * Xb)
             return loss
 
     else:
-        raise ValueError("estimand must be 'ATT' or 'ATE'")
+        raise NotImplementedError("estimand in ['ATT', 'ATE'] supported")
     # Use an optimizer from PyTorch's optimization module, e.g., Adam
     optimizer = torch.optim.Adam([theta], lr=lr)
     # Iteratively apply gradient descent to minimize the loss function
     for iteration in range(niter):
         optimizer.zero_grad()  # Clear previous gradients
-        loss = loss_function(theta, X, w)  # Calculate loss
+        loss = loss_function(theta, X_t, w_t)  # Calculate loss
         loss.backward()  # Compute gradients
         optimizer.step()  # Update theta
         if noi and iteration % 100 == 0:  # Print loss every 100 iterations
@@ -75,9 +81,9 @@ def cbps_torch(
     # Final theta value after optimization
     theta_final = theta.data
     if estimand == "ATT":
-        return np.exp(X @ theta_final)[w == 0]
+        return np.exp(X_t @ theta_final)[w_t == 0]
     elif estimand == "ATE":
-        return np.exp(X @ theta_final)
+        return np.exp(X_t @ theta_final)
 
 
 # %%
@@ -108,7 +114,8 @@ def cbps_retarget(
         X0 = np.c_[(np.ones((n, 1)), X0)]
         X1 = np.r_[1, X1]
     # preprocessing for numpy to pytorch
-    X0, X1 = torch.from_numpy(X0).float(), torch.from_numpy(X1).float()
+    X0 = torch.from_numpy(X0).float().to(device)
+    X1 = torch.from_numpy(X1).float().to(device)
     theta = Variable(torch.randn(p + 1), requires_grad=True)
 
     # retargeting loss (same as ATT with individual level data)
@@ -127,7 +134,7 @@ def cbps_retarget(
         optimizer.step()  # Update theta
         if noi and iteration % 100 == 0:  # Print loss every 100 iterations
             print(f"Iteration {iteration}: loss = {loss.item()}")
-    theta_final = theta.data
+    theta_final = theta.data.numpy()
     wgt = np.exp(X0 @ theta_final)
     return wgt
 
@@ -135,19 +142,30 @@ def cbps_retarget(
 # %% testing
 df = pd.read_csv("../df/lalonde_psid.csv")
 w, y = df.treat.values, df.re78.values
-# naive estimate is garbage - true effect is ~ 1800
+# naive estimate is garbage - true effect is ~ 1800 (1794)
 y[w == 1].mean() - y[w == 0].mean()
 # -15204.775555988717
 # %% stabilize by scaling covariates
 X = df.drop(columns=["treat", "re78"]).values
 X = MinMaxScaler().fit_transform(X)
 # %% cbps estimate of ATT - comes pretty close to true effect
-cbps_wt = cbps_torch(X, w, niter=10_000, lr=0.001, noi=False)
+cbps_wt = cbps_torch(
+    X,
+    w,
+    niter=10_000,
+    lr=0.001,
+    noi=False,
+)
 y[w == 1].mean() - np.average(y[w == 0], weights=cbps_wt)
 # 1671.9811205765518
 # %% test aggregated data - same loss as above
 X0, X1 = X[w == 0], X[w == 1].mean(axis=0)
-wgt = cbps_retarget(X0, X1)
+wgt = cbps_retarget(
+    X0,
+    X1,
+    niter=10_000,
+    lr=0.001,
+)
 y[w == 1].mean() - np.average(y[w == 0], weights=wgt)
 # 1951.5708059253102
 # %%
