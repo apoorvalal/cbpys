@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cbps"
+version = "0.0.1"
+description = "A Python Implementation of Covariate Balance Propensity Score"
+authors = [
+  { name = "Apoorva Lal", email = "apoorval@stanford.edu" }
+]
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "requests",
+  "pytorch",
+  "numpy",
+  "scipy",
+  "scikit-learn"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"] 
+exclude = [
+   "*.R",
+]
+
+[tool.ruff]
+line-length = 80
+
+[tool.ruff.lint]
+extend-select = [
+  "UP",  # pyupgrade
+  "D",   # pydocstyle
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"

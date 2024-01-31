@@ -1,21 +1,31 @@
-# %%
+"""Covariate Balancing Propensity Score estimation for synthetic control weights."""
 import numpy as np
-import pandas as pd
 from scipy.optimize import minimize
-
 from sklearn.linear_model import LogisticRegression
 
 
-# %%
 def cbps_att(
-    X,
-    W,
-    intercept=True,
-    theta_init=None,
-    method="L-BFGS-B",
-    control={},
-    lam=None,
+    X, W, intercept=True, theta_init=None, method="L-BFGS-B", control={}, lam=None
 ):
+    """Synthetic control weights using Covariate Balancing Propensity Score estimation.
+
+    Synth control weights are the solution to the following optimization problem:
+
+    Args:
+        X (np.array): Covariate matrix (n x p)
+        W (np.array): Treatment dummies (n x 1)
+        intercept (bool, optional): Intercept in model? Defaults to True.
+        theta_init (np.array, optional): Initial values for theta. Defaults to None.
+        method (str, optional): Optimization method. Defaults to "L-BFGS-B".
+        control (dict, optional): Control parameters for optimization. Defaults to {}.
+        lam (np.array, optional): Regularization parameters. Defaults to None.
+
+    Raises:
+        ValueError: Estimand not supported
+
+    Returns:
+        dict: Dictionary of results
+    """
     if not np.all(np.isin(W, [0, 1])):
         raise ValueError("W should be a binary vector.")
     if (
@@ -83,7 +93,9 @@ def cbps_att(
     sd_W = np.std(X, axis=0)
     sd_W[sd_W == 0] = 1
     mean_diff = np.mean(X[W1_idx], axis=0) - np.apply_along_axis(
-        lambda x: np.average(x, weights=weights_0[W0_idx]), axis=0, arr=X[W0_idx]
+        lambda x: np.average(x, weights=weights_0[W0_idx]),
+        axis=0,
+        arr=X[W0_idx],
     )
     balance_std = mean_diff / sd_W1
     balance_std_pre = (np.mean(X[W1_idx], axis=0) - np.mean(X[W0_idx], axis=0)) / sd_W1
@@ -104,18 +116,3 @@ def cbps_att(
         if intercept
         else balance_std_pre_all,
     }
-
-
-# %%
-df = pd.read_csv("../df/lalonde_psid.csv")
-df.head()
-# %%
-w, y = df.treat.values, df.re78.values
-X = df.drop(columns=["treat", "re78"]).values
-# %%
-cbps_wt = cbps_att(X, w, method="Powell")
-y[w == 1].mean() - np.average(y[w == 0], weights=cbps_wt["weights_0"][w == 0])
-# %%
-y[w == 1].mean() - y[w == 0].mean()
-
-# %%
