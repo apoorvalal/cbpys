@@ -1,7 +1,8 @@
 """Covariate Balancing Propensity Score estimation in PyTorch."""
-import numpy as np
+
 import torch
-from torch.autograd import Variable
+from tqdm import tqdm
+from functools import cached_property
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -38,12 +39,13 @@ class CBPS:
         self.W = torch.from_numpy(W).float().to(device)
 
         if self.intercept:
-            self.X = np.c_[(np.ones((self.n, 1)), self.X)]
+            self.X = torch.concat((torch.ones((self.n, 1)).to(device), self.X), 1)
 
         # Parameters theta to be optimized
-        self.theta = list(Variable(torch.randn(self.p + 1), requires_grad=True))
+        self.theta = torch.randn(self.p + 1, requires_grad=True, device=device)
 
     def __repr__(self):
+        """Representation of the class."""
         return "Esimating CBPS with PyTorch using {device}"
 
     @staticmethod
@@ -82,14 +84,18 @@ class CBPS:
 
         return loss
 
+    @cached_property
     def fit(self):
-        """Estimate weights optimizing loss function."""
-        optimizer = torch.optim.Adam(self.theta, lr=self.lr)
+        """Estimate theta via SGD using target estimand loss function."""
+        optimizer = torch.optim.Adam([self.theta], lr=self.lr)
 
-        # Iteratively and update theta vector
-        for iteration in range(self.niter):
+        for iteration in tqdm(range(self.niter), desc="Optimizing CBPS..."):
             optimizer.zero_grad()
-            loss = self.loss_function(self.theta, self.X_t, self.w_t)
+
+            if self.estimand == "ATT":
+                loss = self.loss_function_att(self.theta, self.X, self.W)
+            elif self.estimand == "ATE":
+                loss = self.loss_function(self.theta, self.X, self.W)
 
             if self.reg:
                 loss += self.reg * torch.linalg.vector_norm(self.theta, 1)
@@ -100,13 +106,14 @@ class CBPS:
             if self.noi and iteration % 100 == 0:
                 print(f"Iteration {iteration}: loss = {loss.item()}")
 
-        return None
+        return self.theta
 
-    def parameters(self):
-        """Return final parameters after optimization."""
+    def weights(self):
+        """Return final weights after optimization."""
+        weights = self.fit
         if self.estimand == "ATT":
-            out = np.exp(self.X_t @ self.theta)[self.w_t == 0]
+            out = torch.exp(self.X @ weights)[self.W == 0]
         elif self.estimand == "ATE":
-            out = np.exp(self.X @ self.theta)
+            out = torch.exp(self.X @ weights)
 
         return out
