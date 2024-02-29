@@ -139,7 +139,7 @@ class CBPS:
 
         return (std_diffs_unweight, std_diffs_weight)
 
-    def diagnose(self, method):
+    def diagnose(self, method, ax=None, scatter=False):
         """Plot standarized differences.
 
         Show plot of standarized differences for the balancing covariates to show
@@ -147,30 +147,40 @@ class CBPS:
 
         Args:
             method (str): method to calculate standarized differences
+            ax (matplotlib.axes, optional): axes to plot. Defaults to None.
+            scatter (bool, optional): Scatter plot of unweighted and weighted balance. Defaults to False.
 
         Returns:
             matplotlib.axes
         """
-        fig, ax = plt.subplots(figsize=(10, 6))
+        if not ax:
+            fig, ax = plt.subplots(figsize=(10, 6))
 
-        std_diff_uw, std_diff_w = self._covariate_differences(method)
 
-        ax.plot(
-            std_diff_w.std_diffs,
-            std_diff_w.index,
-            "o",
-            label="Weighted",
-        )
-        ax.plot(std_diff_uw.std_diffs, std_diff_uw.index, "o", label="Unweighted")
-        ax.axvline(0, color="black", linestyle="--")
-
-        # Add labels to axis
-        ax.set_ylabel("Variables")
-        ax.set_xlabel("Standardized Differences")
-
-        # Add legend to the plot
-        ax.legend()
-
+        if not scatter:
+            std_diff_uw, std_diff_w = self._covariate_differences(method)
+            ax.plot(
+                std_diff_w.std_diffs,
+                std_diff_w.index,
+                "o",
+                label="Weighted",
+            )
+            ax.plot(std_diff_uw.std_diffs, std_diff_uw.index, "o", label="Unweighted")
+            ax.axvline(0, color="black", linestyle="--")
+            # Add labels to axis
+            ax.set_ylabel("Variables")
+            ax.set_xlabel("Standardized Differences")
+            # Add legend to the plot
+            ax.legend()
+        else:
+            std_diff_uw, std_diff_w = self._covariate_differences('asmd')
+            ax.scatter(
+                x = std_diff_uw.std_diffs,
+                y = std_diff_w.std_diffs,
+            )
+            ax.plot([0, 1], [0, 1], color='red', linestyle='--')
+            ax.set_ylabel("Weighted Standardized Differences")
+            ax.set_xlabel("Unweighted Standardized Differences")
         return ax
 
     @staticmethod

@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 
-from src.cbps_att import cbps_att
+from cbps_scipy import cbps_att
 from src.cbps_torch import cbps_retarget, cbps_torch
 
 ## From the scipy implementation
