@@ -1,8 +1,16 @@
 """Covariate Balancing Propensity Score estimation in PyTorch."""
 
-import torch
-from tqdm import tqdm
 from functools import cached_property
+from typing import Union
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+from sklearn.preprocessing import MinMaxScaler
+from tqdm import tqdm
+
+from .diagnostics.differences import standarized_diffs
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -12,15 +20,15 @@ class CBPS:
 
     def __init__(
         self,
-        X,
-        W,
-        estimand="ATT",
-        intercept=True,
-        noi=False,
-        niter=1000,
-        lr=0.01,
-        svd=None,
-        reg=None,
+        X: Union[np.array, pd.DataFrame],
+        W: Union[np.array, str],
+        estimand: str = "ATT",
+        intercept: bool = True,
+        noi: bool = False,
+        niter: int = 1000,
+        lr: float = 0.01,
+        svd: int = None,
+        reg: float = None,
     ):
         """Covariate Balancing Propensity Score estimation in PyTorch.
 
@@ -58,6 +66,23 @@ class CBPS:
         if self.estimand not in ["ATT", "ATE"]:
             raise NotImplementedError("Estimand in ['ATT', 'ATE'] supported")
 
+        # Parse varaibles if a pandas dataframe is passed
+        if isinstance(W, str):
+            # We asumme here if a string is passed, we expect a dataframe
+            if not isinstance(X, pd.DataFrame):
+                raise ValueError("If W is a string, X should be a dataframe")
+
+            self.treat_var = W
+            W = X[self.treat_var].values
+
+        if isinstance(X, pd.DataFrame):
+            self.df = X.copy()
+            X = X.drop(columns=[self.treat_var]).values
+
+            # Normalize covariates if passed as a dataframe
+            # maybe this should be an option
+            X = MinMaxScaler().fit_transform(X)
+
         # Define parameters for calculation
         self.n, self.p = X.shape
         self.W = torch.from_numpy(W).float().to(device)
@@ -87,6 +112,66 @@ class CBPS:
     def __repr__(self):
         """Representation of the class."""
         return "Esimating CBPS with PyTorch using {device}"
+
+    def _covariate_differences(self, metric):
+        """Calculate standarized differences without weights."""
+        try:
+            std_diffs_weight = standarized_diffs(
+                df_vars=self.df,
+                treat_var=self.treat_var,
+                metric=metric,
+                weights=self.weights,
+            )
+            std_diffs_unweight = standarized_diffs(
+                df_vars=self.df, treat_var=self.treat_var, metric=metric
+            )
+
+        except AttributeError:
+            std_diffs_weight = standarized_diffs(
+                df_vars=self.X,
+                treat_var=self.W,
+                metric=metric,
+                weights=self.weights,
+            )
+            std_diffs_unweight = standarized_diffs(
+                df_vars=self.X, treat_var=self.W, metric=metric
+            )
+
+        return (std_diffs_unweight, std_diffs_weight)
+
+    def diagnose(self, method):
+        """Plot standarized differences.
+
+        Show plot of standarized differences for the balancing covariates to show
+        the final balance achieved by the CBPS method.
+
+        Args:
+            method (str): method to calculate standarized differences
+
+        Returns:
+            matplotlib.axes
+        """
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        std_diff_uw, std_diff_w = self._covariate_differences(method)
+
+        ax.plot(
+            std_diff_w.std_diffs,
+            std_diff_w.index,
+            "o",
+            label="Weighted",
+        )
+        ax.plot(std_diff_uw.std_diffs, std_diff_uw.index, "o", label="Unweighted")
+        ax.axvline(0, color="black", linestyle="--")
+
+        # Add labels to axis
+        ax.set_ylabel("Variables")
+        ax.set_xlabel("Standardized Differences")
+
+        # Add legend to the plot
+        ax.legend()
+
+        return ax
 
     @staticmethod
     def loss_function_att(theta, X, W):
@@ -150,13 +235,14 @@ class CBPS:
 
         return self.theta
 
+    @property
     def weights(self):
         """Return final weights after optimization.
 
         Compute weights for the estimand of interest.
 
         Returns:
-            torch.tensor: weights
+            np.array: weights
         """
         weights = self.fit
         if self.estimand == "ATT":
