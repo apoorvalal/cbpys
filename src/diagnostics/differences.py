@@ -58,18 +58,20 @@ def standarized_diffs(df_vars, treat_var, metric="smd", exclude=None, weights=No
         mean_treat = X[treat == 1, :].mean(axis=0)
         mean_control = X[treat == 0, :].mean(axis=0)
 
-    # Calculate for all the variables
-    std_vars = X.std(axis=0)
+    # Following Imbens and Rubin (2015) we use the pooled standard deviation
+    # across both groups
+    std_vars = torch.sqrt(
+        (torch.var(X[treat == 1, :]) + torch.var(X[treat == 0, :])) / 2
+    )
 
     # Standardized differences
     if metric == "smd":
         std_diffs = (mean_treat - mean_control) / std_vars
     elif metric == "asmd":
-
         if isinstance(weights, np.ndarray):
-            std_diffs = np.abs((mean_treat - mean_control) / std_vars)
+            std_diffs = np.abs(mean_treat - mean_control) / std_vars
         else:
-            std_diffs = torch.abs((mean_treat - mean_control) / std_vars)
+            std_diffs = torch.abs(mean_treat - mean_control) / std_vars
     else:
         raise NotImplementedError(
             f"Metric {metric} not recognized. Choose between {metrics.keys()}"

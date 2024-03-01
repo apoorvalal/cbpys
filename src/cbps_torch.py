@@ -120,7 +120,7 @@ class CBPS:
                 df_vars=self.df,
                 treat_var=self.treat_var,
                 metric=metric,
-                weights=self.weights,
+                weights=self.weights(),
             )
             std_diffs_unweight = standarized_diffs(
                 df_vars=self.df, treat_var=self.treat_var, metric=metric
@@ -131,7 +131,7 @@ class CBPS:
                 df_vars=self.X,
                 treat_var=self.W,
                 metric=metric,
-                weights=self.weights,
+                weights=self.weights(),
             )
             std_diffs_unweight = standarized_diffs(
                 df_vars=self.X, treat_var=self.W, metric=metric
@@ -156,7 +156,6 @@ class CBPS:
         if not ax:
             fig, ax = plt.subplots(figsize=(10, 6))
 
-
         if not scatter:
             std_diff_uw, std_diff_w = self._covariate_differences(method)
             ax.plot(
@@ -173,12 +172,12 @@ class CBPS:
             # Add legend to the plot
             ax.legend()
         else:
-            std_diff_uw, std_diff_w = self._covariate_differences('asmd')
+            std_diff_uw, std_diff_w = self._covariate_differences("asmd")
             ax.scatter(
-                x = std_diff_uw.std_diffs,
-                y = std_diff_w.std_diffs,
+                x=std_diff_uw.std_diffs,
+                y=std_diff_w.std_diffs,
             )
-            ax.plot([0, 1], [0, 1], color='red', linestyle='--')
+            ax.plot([0, 1], [0, 1], color="red", linestyle="--")
             ax.set_ylabel("Weighted Standardized Differences")
             ax.set_xlabel("Unweighted Standardized Differences")
         return ax
@@ -245,8 +244,7 @@ class CBPS:
 
         return self.theta
 
-    @property
-    def weights(self):
+    def weights(self, numpy=False):
         """Return final weights after optimization.
 
         Compute weights for the estimand of interest.
@@ -259,5 +257,8 @@ class CBPS:
             out = torch.exp(self.X @ weights)[self.W == 0]
         elif self.estimand == "ATE":
             out = torch.exp(self.X @ weights)
+
+        if numpy:
+            return out.cpu().detach().numpy()
 
         return out
