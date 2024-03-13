@@ -7,7 +7,15 @@ import pandas as pd
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 
-def standarized_diffs(df_vars, treat_var, metric="smd", exclude=None, weights=None):
+def standarized_diffs(
+    df_vars,
+    treat_var,
+    metric="smd",
+    exclude=None,
+    weights=None,
+    column_names=None,
+    device=device,
+):
     """Compute the standardized differences between the treatment and control groups.
 
     To compare the quality of the weighting, we can check the standarized differences
@@ -22,6 +30,8 @@ def standarized_diffs(df_vars, treat_var, metric="smd", exclude=None, weights=No
         metric (str, optional): metric to use. Defaults to "smd".
         exclude (list, optional): list of variables to exclude. Defaults to None.
         weights (np.array, optional): weights to use in the calculation. Defaults to None.
+        column_names (list, optional): list of column names. Defaults to None.
+        device (torch.device, optional): device to use. Defaults to device (gpu if available, cpu otherwise).
 
     Returns:
         pd.DataFrame: dataframe with the standarized differences
@@ -41,9 +51,12 @@ def standarized_diffs(df_vars, treat_var, metric="smd", exclude=None, weights=No
         treat = df_vars[treat_var].values
         index = df_vars.columns
     else:
-        X = df_vars
-        treat = treat_var
-        index = [f"V{n}" for n in range(X.shape[1])]
+        X = df_vars.to(device)
+        treat = treat_var.to(device)
+        if column_names is not None:
+            index = column_names
+        else:
+            index = [f"V{n}" for n in range(X.shape[1])]
 
     # Transform to torch if not already
     if not isinstance(X, torch.Tensor):
@@ -51,6 +64,7 @@ def standarized_diffs(df_vars, treat_var, metric="smd", exclude=None, weights=No
         treat = torch.from_numpy(treat).float().to(device)
 
     if weights is not None:
+        weights = weights.to(device)
         mean_treat = X[treat == 1, :].mean(axis=0)
         mean_control = (X[treat == 0, :].T @ weights) / weights.sum()
 
