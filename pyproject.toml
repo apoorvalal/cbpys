@@ -3,27 +3,28 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "cbps"
-version = "0.0.1"
-description = "A Python Implementation of Covariate Balance Propensity Score"
+name = "cbpys"
+version = "0.0.2"
+description = "A Python Implementation of Covariate Balance Propensity Scores"
 authors = [
-  { name = "Apoorva Lal", email = "apoorval@stanford.edu" }
+  { name = "Apoorva Lal", email = "lal.apoorva@gmail.com" }
 ]
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
   "requests",
-  "pytorch",
   "numpy",
   "scipy",
-  "scikit-learn"
+  "tqdm",
+  "scikit-learn",
+  "pandas",
+  "matplotlib",
 ]
 
 [tool.setuptools.packages.find]
-where = ["src"] 
-exclude = [
-   "*.R",
-]
+where = ["."]  # Look for packages in the current directory
+include = ["cbpys*"]  # Include all packages starting with cbpys
+exclude = ["*.R",]
 
 [tool.ruff]
 line-length = 80
