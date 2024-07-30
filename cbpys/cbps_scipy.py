@@ -1,7 +1,28 @@
 """Covariate Balancing Propensity Score estimation for synthetic control weights."""
+
 import numpy as np
 from scipy.optimize import minimize
 from sklearn.linear_model import LogisticRegression
+
+
+def lbw(
+    X0: np.array,
+    X1: np.array,
+) -> np.array:
+    """Estimates Linear balancing weights.
+
+    Args:
+        X0 (np.array): Covariate matrix for source population
+        X1 (np.array): Moments of target distribution
+        y (np.array): outcome vector (optional)
+        w (np.array): treatment vector (optional)
+
+    Returns:
+        np.array: weights
+    """
+    H00 = np.linalg.pinv(X0.T @ X0) @ X0.T
+    wt = X1 @ H00
+    return wt
 
 
 def cbps_att(
@@ -112,7 +133,7 @@ def cbps_att(
         "balance_std": balance_std[1:] if intercept else balance_std,
         "balance_std_pre": balance_std_pre[1:] if intercept else balance_std_pre,
         "balance_std_all": balance_std_all[1:] if intercept else balance_std_all,
-        "balance_std_pre_all": balance_std_pre_all[1:]
-        if intercept
-        else balance_std_pre_all,
+        "balance_std_pre_all": (
+            balance_std_pre_all[1:] if intercept else balance_std_pre_all
+        ),
     }
