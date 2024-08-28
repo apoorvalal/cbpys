@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import torch
+from torch.utils.data import TensorDataset, DataLoader
 from sklearn.preprocessing import MinMaxScaler
 from tqdm import tqdm
 
@@ -260,41 +261,46 @@ class CBPS:
         return loss
 
     @cached_property
-    def fit(self):
+    def fit(self, batch_size: int = 1000):
         """Estimate theta via SGD using target estimand loss function."""
-        # Loop over the list of regularizations
-        optimizer = torch.optim.Adam([self.theta], lr=self.lr)
+        # Create a TensorDataset
+        dataset = TensorDataset(self.X, self.W)
 
-        # Add a learning rate scheduler
+        # Create a DataLoader
+
+        dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+        optimizer = torch.optim.SGD([self.theta], lr=self.lr)
+
         if self.scheduler:
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer, step_size=1000, gamma=0.1
-            )
+            scheduler = torch.optim.StepLR(optimizer, step_size=1000, gamma=0.1)
 
-        for iteration in tqdm(range(self.niter), desc="Optimizing CBPS..."):
-            optimizer.zero_grad()
+        for epoch in tqdm(range(self.niter), desc="Optimizing CBPS..."):
+            epoch_loss = 0
+            for batch_X, batch_W in dataloader:
+                optimizer.zero_grad()
 
-            if self.estimand == "ATT":
-                loss = self.loss_function_att(self.theta, self.X, self.W)
-            elif self.estimand == "ATE":
-                loss = self.loss_function(self.theta, self.X, self.W)
+                if self.estimand == "ATT":
+                    loss = self.loss_function_att(self.theta, batch_X, batch_W)
+                elif self.estimand == "ATE":
+                    loss = self.loss_function(self.theta, batch_X, batch_W)
 
-            if self.reg:
-                loss += self.reg * torch.linalg.vector_norm(self.theta, 2)
+                if self.reg:
+                    loss += self.reg * torch.linalg.vector_norm(self.theta, 2)
 
-            loss.backward()
-            optimizer.step()
+                loss.backward()
+                optimizer.step()
+
+                epoch_loss += loss.item()
 
             if self.scheduler:
                 scheduler.step()
-
-                # Store learning rate and loss
                 self.lr_decay.append(scheduler.get_last_lr()[0])
 
-            self.loss.append(loss.item())
+            self.loss.append(epoch_loss / len(dataloader))
 
-            if self.noi and iteration % 100 == 0:
-                print(f"Iteration {iteration}: loss = {loss.item()}")
+            if self.noi and epoch % 100 == 0:
+                print(f"Epoch {epoch}: loss = {epoch_loss / len(dataloader)}")
 
         return self.theta
 
